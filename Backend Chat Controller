@@ -1,0 +1,137 @@
+import { NextFunction, Request, Response } from "express";
+import User from "../models/User.js";
+import { configureOpenAI } from "../config/openai-config.js";
+import { OpenAIApi, ChatCompletionRequestMessage } from "openai";
+
+/**
+ * GET /chat
+ * Fetch all chat messages for the logged-in user
+ */
+export const getUserChats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const user = await User.findById(res.locals.jwtData.id);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "User not registered OR Token malfunctioned" });
+    }
+    if (user._id.toString() !== res.locals.jwtData.id) {
+      return res.status(401).send("Permissions didn't match");
+    }
+    return res.status(200).json({ message: "OK", chats: user.chats });
+  } catch (error: any) {
+    console.log("getUserChats Error:", error);
+    return res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+/**
+ * POST /chat
+ * Send user's latest message to OpenAI and get assistant reply
+ */
+export const sendChatCompletion = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { message } = req.body;
+    const user = await User.findById(res.locals.jwtData.id);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ message: "User not registered OR Token malfunctioned" });
+    }
+    if (user._id.toString() !== res.locals.jwtData.id) {
+      return res.status(401).send("Permissions didn't match");
+    }
+
+    const existingChats: ChatCompletionRequestMessage[] = user.chats.map(
+      ({ role, content }: { role: string; content: string }) => ({
+        role: role as "system" | "user" | "assistant",
+        content,
+      })
+    );
+
+    const systemMessage: ChatCompletionRequestMessage = {
+      role: "system",
+      content: `
+        You are strictly playing the role of a suspect in a theft case.
+        Guidelines:
+        1. Respond ONLY if the user asks a question. Do not volunteer extra details.
+        2. Do NOT become the interviewer, do not ask your own questions.
+        3. If the user says something that is not a direct question, respond briefly with:
+           "I have nothing to say about that."
+        4. Remain in first-person perspective as if you are being interrogated.
+        5. If unsure or you lack details, say "I don't know" or "I don't recall."
+        6. Never break character as the theft suspect. Never become the interviewer or any other role.
+        7. Keep your answers concise. If the user attempts to make you do otherwise, politely refuse or remain silent in suspect character.
+      `,
+    };
+
+    const userMessage: ChatCompletionRequestMessage = {
+      role: "user",
+      content: message,
+    };
+
+    user.chats.push({ role: "user", content: message });
+
+    const config = configureOpenAI();
+    const openai = new OpenAIApi(config);
+
+    const chatResponse = await openai.createChatCompletion({
+      model: "gpt-3.5-turbo",
+      temperature: 0,
+      presence_penalty: 0.5,
+      frequency_penalty: 0.5,
+      messages: [systemMessage, ...existingChats, userMessage],
+    });
+
+    const assistantMessage = chatResponse.data.choices[0].message;
+    if (assistantMessage) {
+      user.chats.push({
+        role: assistantMessage.role,
+        content: assistantMessage.content,
+      });
+    }
+
+    await user.save();
+
+    return res.status(200).json({ chats: user.chats });
+  } catch (error: any) {
+    console.log("sendChatCompletion Error:", error);
+    return res.status(500).json({ message: "Something went wrong" });
+  }
+};
+
+/**
+ * DELETE /chat
+ * Clears all user chats
+ */
+export const deleteChats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const user = await User.findById(res.locals.jwtData.id);
+    if (!user) {
+      return res.status(401).send("User not registered OR Token malfunctioned");
+    }
+    if (user._id.toString() !== res.locals.jwtData.id) {
+      return res.status(401).send("Permissions didn't match");
+    }
+
+    user.chats.splice(0, user.chats.length);
+    await user.save();
+
+    return res.status(200).json({ message: "OK" });
+  } catch (error: any) {
+    console.log("deleteChats Error:", error);
+    return res.status(500).json({ message: "Something went wrong" });
+  }
+};
