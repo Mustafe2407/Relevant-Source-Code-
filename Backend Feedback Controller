@@ -1,0 +1,54 @@
+// controllers/feedback-controllers.ts
+import { Request, Response } from "express";
+
+export type ChatMessage = {
+  role: "user" | "assistant" | "system";
+  content: string;
+};
+
+export const analyzeInterview = (messages: ChatMessage[]) => {
+  const feedback: string[] = [];
+
+  // 1) Check if user asked at least one question containing a question mark
+  const userQuestions = messages.filter(
+    (m) => m.role === "user" && m.content.trim().includes("?")
+  );
+  if (userQuestions.length > 0) {
+    feedback.push("Great job using questions to probe the suspect.");
+  } else {
+    feedback.push("Try asking more open-ended questions (and include a '?').");
+  }
+
+  // 2) Check if user tried to clarify timeline (Planning & Preparation aspect)
+  const mentionOfTimeline = messages.some((m) =>
+    m.content.toLowerCase().includes("when")
+  );
+  if (mentionOfTimeline) {
+    feedback.push("You addressed the time factor (Planning). Well done!");
+  } else {
+    feedback.push("Consider clarifying the timeline to align with PEACE.");
+  }
+
+  // Additional placeholders for Engage, Account, Closure, etc.
+  feedback.push(
+    "Aim for open-ended questions and summarizing to follow the PEACE model more thoroughly."
+  );
+
+  return feedback;
+};
+
+export const getFeedback = (req: Request, res: Response) => {
+  try {
+    const { messages } = req.body;
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ message: "Invalid messages array" });
+    }
+
+    const feedback = analyzeInterview(messages);
+    return res.status(200).json({ feedback });
+  } catch (error) {
+    console.error("Feedback error:", error);
+    return res.status(500).json({ message: "Failed to generate feedback" });
+  }
+};
+
