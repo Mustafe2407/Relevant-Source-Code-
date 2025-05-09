@@ -1,0 +1,202 @@
+// src/pages/FeedbackPage.tsx
+
+import { useEffect, useState } from "react";
+import {
+  Box,
+  Card,
+  CardContent,
+  Typography,
+  List,
+  ListItem,
+  Button,
+} from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import { getUserChats } from "../helpers/api-communicator";
+
+/** Shape of chat messages from the backend */
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+/**
+ * Array of substrings indicating "bad" or leading questions.
+ * If a user question contains any of these, we'll flag it.
+ */
+const BAD_QUESTION_PATTERNS = [
+  "didn't you",
+  "was you",
+  "didn't you",
+  "did you",
+  "isn't it true",
+  "you used the back door",
+  "you knew the alarm code",
+  "did you disable",
+  "you specifically targeted",
+  "so, you already knew",
+  "isn't it obvious",
+  "you smashed the display case",
+  "were you wearing gloves",
+  "you realized the stores security system was outdated",
+  "doesn't this prove",
+  "you planned to sell everything on the black market",
+  "didn't you meet your accomplice",
+  "you must have staked out the store beforehand",
+  "is it true you left town immediately after the robbery",
+];
+
+const FeedbackPage = () => {
+  const navigate = useNavigate();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [feedback, setFeedback] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // --------------------------
+  // MAIN ANALYSIS FUNCTION
+  // --------------------------
+  const analyzeInterview = (msgs: ChatMessage[]) => {
+    const results: string[] = [];
+
+    // 1) Check if the user asked at least one question containing '?'
+    const userQuestions = msgs.filter(
+      (m) => m.role === "user" && m.content.trim().includes("?")
+    );
+    if (userQuestions.length > 0) {
+      results.push("Good job using some questions to probe the suspect.");
+    } else {
+      results.push("Try asking more open-ended questions (include a '?').");
+    }
+
+    // 2) Detect timeline references (Planning & Preparation)
+    const mentionOfTimeline = msgs.some((m) =>
+      m.content.toLowerCase().includes("when")
+    );
+    if (mentionOfTimeline) {
+      results.push("You addressed the time factor (Planning). Well done!");
+    } else {
+      results.push("Consider clarifying the timeline to align with PEACE.");
+    }
+
+    // 3) Check if suspect gave short / minimal answers => user should ask more open-ended Qs
+    const shortAssistantAnswers = msgs.filter((m) => {
+      if (m.role !== "assistant") return false;
+      const contentLower = m.content.trim().toLowerCase();
+      const wordCount = m.content.trim().split(/\s+/).length;
+      const minimalPhrases = [
+        "yes",
+        "no",
+        "i have nothing to say",
+        "i don't recall",
+      ];
+      const isMinimal =
+        minimalPhrases.includes(contentLower) || wordCount <= 3;
+      return isMinimal;
+    });
+    if (shortAssistantAnswers.length > 0) {
+      results.push(
+        "The suspect gave short yes/no answers. Ask more open-ended questions to gather more information."
+      );
+    }
+
+    // 4) Detect "bad" leading/closed questions from your 15 examples
+    const userBadQuestions = msgs.filter((m) => {
+      if (m.role !== "user") return false;
+      const lcContent = m.content.toLowerCase();
+      return BAD_QUESTION_PATTERNS.some((pattern) =>
+        lcContent.includes(pattern.toLowerCase())
+      );
+    });
+    if (userBadQuestions.length > 0) {
+      results.push(
+        "We detected that you asked leading or closed-ended questions (e.g., 'didn't you...?'). Try to rephrase them as open-ended questions."
+      );
+    }
+
+    // 5) General final feedback snippet
+    results.push(
+      "Keep your questions methodical and encourage the suspect to expand on answers."
+    );
+
+    return results;
+  };
+
+  // --------------------------
+  // FETCH + EVALUATE
+  // --------------------------
+  const fetchAndEvaluate = async () => {
+    try {
+      setLoading(true);
+      const data = await getUserChats(); // { message: 'OK', chats: [...] }
+      const allMessages = data.chats || [];
+      setMessages(allMessages);
+
+      // Analyze
+      const newFeedback = analyzeInterview(allMessages);
+      setFeedback(newFeedback);
+    } catch (error) {
+      console.error("Feedback error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --------------------------
+  // USE EFFECT
+  // --------------------------
+  useEffect(() => {
+    fetchAndEvaluate();
+    const intervalId = setInterval(() => {
+      fetchAndEvaluate();
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // --------------------------
+  // RENDER
+  // --------------------------
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", p: 3 }}>
+      <Typography variant="h4" sx={{ mb: 2, color: "white" }}>
+        PEACE Framework Feedback Based On Your Interview
+      </Typography>
+
+      {loading ? (
+        <Typography variant="body1" sx={{ color: "white" }}>
+          Gathering your feedback...
+        </Typography>
+      ) : (
+        <>
+          <Typography variant="body2" sx={{ mb: 2, color: "white" }}>
+            Found {messages.length} messages in your conversation.
+          </Typography>
+
+          <Card sx={{ bgcolor: "rgb(17,29,39)", borderRadius: 3 }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ mb: 1, color: "white" }}>
+                Assessment of Your Interview
+              </Typography>
+              <List>
+                {feedback.map((point, idx) => (
+                  <ListItem key={idx} sx={{ color: "white" }}>
+                    {point}
+                  </ListItem>
+                ))}
+              </List>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      <Button
+        variant="contained"
+        sx={{ mt: 2, bgcolor: "#51538f", ":hover": { bgcolor: "#3c3f6e" } }}
+        onClick={() => navigate("/chat")}
+      >
+        Back to Chat
+      </Button>
+    </Box>
+  );
+};
+
+export default FeedbackPage;
