@@ -1,0 +1,247 @@
+import { useEffect, useRef, useState } from "react";
+import { Box, Avatar, Typography, Button, IconButton } from "@mui/material";
+import red from "@mui/material/colors/red";
+import { useAuth } from "../context/AuthContext";
+import ChatItem from "../components/chat/ChatItem";
+import { IoMdSend } from "react-icons/io";
+import { useNavigate } from "react-router-dom";
+import {
+  deleteUserChats,
+  getUserChats,
+  sendChatRequest,
+} from "../helpers/api-communicator";
+import toast from "react-hot-toast";
+
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const Chat = () => {
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const auth = useAuth();
+  const [chatMessages, setChatMessages] = useState<Message[]>([]);
+
+  // Handle single or no last name
+  const fullName = auth?.user?.name || "";
+  const nameParts = fullName.split(" ").filter(Boolean);
+  const firstInitial = nameParts[0]?.[0] || "";
+  const lastInitial = nameParts[1]?.[0] || "";
+
+  // Load existing conversation on mount
+  useEffect(() => {
+    if (auth?.isLoggedIn && auth.user) {
+      toast.loading("Loading Chats", { id: "loadchats" });
+
+      // Now we call getUserChats(), which includes credentials: 'include'
+      getUserChats()
+        .then((data) => {
+          setChatMessages([...data.chats]);
+          toast.success("Successfully loaded chats", { id: "loadchats" });
+        })
+        .catch((err) => {
+          console.log(err);
+          toast.error("Loading Failed", { id: "loadchats" });
+        });
+    }
+  }, [auth]);
+
+  // If not logged in, redirect to login
+  useEffect(() => {
+    if (!auth?.user) {
+      navigate("/login");
+    }
+  }, [auth, navigate]);
+
+  // Handle submission of a new user message
+  const handleSubmit = async () => {
+    const content = inputRef.current?.value as string;
+    if (inputRef.current) {
+      inputRef.current.value = "";
+    }
+    const newMessage: Message = { role: "user", content };
+    setChatMessages((prev) => [...prev, newMessage]);
+
+    // Send to the backend so it's saved in the database
+    const chatData = await sendChatRequest(content);
+    // Replace local messages with the updated conversation from DB
+    setChatMessages([...chatData.chats]);
+  };
+
+  const handleDeleteChats = async () => {
+    try {
+      toast.loading("Deleting Chats", { id: "deletechats" });
+      await deleteUserChats();
+      setChatMessages([]);
+      toast.success("Deleted Chats Successfully", { id: "deletechats" });
+    } catch (error) {
+      console.log(error);
+      toast.error("Deleting chats failed", { id: "deletechats" });
+    }
+  };
+
+  return (
+    <Box sx={{ display: "flex", flex: 1, width: "100%", height: "100%" }}>
+      {/* ---- Policing Guidelines Reminder (navy background) ---- */}
+      <Box
+        sx={{
+          width: "300px",
+          p: 2,
+          bgcolor: "rgb(17,29,39)",
+          color: "white",
+          overflow: "auto",
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 1 }}>
+          Policing Guidelines Reminder
+        </Typography>
+        <Typography sx={{ fontSize: "14px" }}>
+          • The crime that happened was a reported theft at the Sunset Jewellery Store
+            on the 12th August 2023 at around 2:00 AM.
+          <br />
+          • Use open-ended questions (PEACE model).
+          <br />
+          • Be professional, non-oppressive, but persistent.
+          <br />
+          • The suspect may say "I don’t recall" if uncertain.
+          <br />
+          • Stay methodical, link answers, watch for 'no comment' answers.
+        </Typography>
+      </Box>
+
+      {/* ---- Main chat area ---- */}
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          flex: 1,
+          mt: 3,
+          gap: 3,
+          px: 3,
+        }}
+      >
+        {/* Title */}
+        <Typography
+          sx={{
+            fontSize: "40px",
+            color: "white",
+            mb: 2,
+            mx: "auto",
+            fontWeight: 600,
+          }}
+        >
+          I have potentially stolen a high-value item
+        </Typography>
+
+        {/* Chat container */}
+        <Box
+          sx={{
+            display: "flex",
+            width: "100%",
+            height: "60vh",
+            borderRadius: 3,
+            bgcolor: "rgb(17,29,39)",
+            flexDirection: "column",
+            overflow: "auto",
+          }}
+        >
+          {/* Left side (Avatar, instructions) */}
+          <Box
+            sx={{
+              display: { md: "flex", xs: "none", sm: "none" },
+              flex: 0.2,
+              flexDirection: "column",
+              borderRadius: 5,
+              mx: 3,
+            }}
+          >
+            <Avatar
+              sx={{
+                mx: "auto",
+                my: 2,
+                bgcolor: "white",
+                color: "black",
+                fontWeight: 700,
+              }}
+            >
+              {firstInitial}
+              {lastInitial}
+            </Avatar>
+
+            <Typography sx={{ mx: "auto", fontFamily: "work sans" }}>
+              Trained to role-play as a criminal.
+            </Typography>
+            <Typography sx={{ mx: "auto", fontFamily: "work sans", my: 4, p: 3 }}>
+              This chatbot will role-play as a suspect who committed a theft.
+              Ask questions to practice your suspect interview skills.
+            </Typography>
+            <Button
+              onClick={handleDeleteChats}
+              sx={{
+                width: "200px",
+                my: "auto",
+                color: "white",
+                fontWeight: 700,
+                borderRadius: 3,
+                mx: "auto",
+                bgcolor: red[300],
+                ":hover": {
+                  bgcolor: red.A400,
+                },
+              }}
+            >
+              Clear Conversation
+            </Button>
+          </Box>
+
+          {/* Actual chat messages */}
+          <Box
+            sx={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              p: 2,
+            }}
+          >
+            {chatMessages.map((chat, index) => (
+              <ChatItem content={chat.content} role={chat.role} key={index} />
+            ))}
+          </Box>
+        </Box>
+
+        {/* Input box to send messages */}
+        <Box
+          sx={{
+            width: "100%",
+            borderRadius: 2,
+            bgcolor: "rgb(17,27,39)",
+            display: "flex",
+            alignItems: "center",
+            p: 2,
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            style={{
+              flex: 1,
+              backgroundColor: "transparent",
+              border: "none",
+              outline: "none",
+              color: "white",
+              fontSize: "18px",
+              paddingRight: "10px",
+            }}
+          />
+          <IconButton onClick={handleSubmit} sx={{ color: "white" }}>
+            <IoMdSend />
+          </IconButton>
+        </Box>
+      </Box>
+    </Box>
+  );
+};
+
+export default Chat;
+
