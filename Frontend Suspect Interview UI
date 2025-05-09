@@ -1,0 +1,127 @@
+import { Box, Avatar, Typography } from "@mui/material";
+import { useAuth } from "../../context/AuthContext";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { coldarkDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+
+function extractCodeFromString(message: string): string[] {
+  if (message.includes("```")) {
+    // split by triple backticks
+    return message.split("```");
+  }
+  return [];
+}
+
+function isCodeBlock(str: string) {
+  // Just a quick guess check
+  return (
+    str.includes("=") ||
+    str.includes(";") ||
+    str.includes("[") ||
+    str.includes("]") ||
+    str.includes("{") ||
+    str.includes("}") ||
+    str.includes("#") ||
+    str.includes("//")
+  );
+}
+
+type ChatItemProps = {
+  content: string;
+  role: "user" | "assistant";
+};
+
+const ChatItem = ({ content, role }: ChatItemProps) => {
+  const auth = useAuth();
+  const messageBlocks = extractCodeFromString(content);
+
+  // Safely handle user name initials for role="user"
+  const fullName = auth?.user?.name || "";
+  const nameParts = fullName.split(" ").filter(Boolean);
+  const firstInitial = nameParts[0]?.[0] ?? ""; // safely get first char
+  const lastInitial = nameParts[1]?.[0] ?? "";  // if exists
+
+  if (role === "assistant") {
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          p: 2,
+          bgcolor: "#004d5612",
+          gap: 2,
+          borderRadius: 2,
+          my: 1,
+        }}
+      >
+        <Avatar sx={{ ml: 0 }}>
+          <img src="openai.png" alt="openai" width={"30px"} />
+        </Avatar>
+
+        <Box>
+          {messageBlocks.length === 0 ? (
+            /* If no triple-backticks found, just show text */
+            <Typography sx={{ fontSize: 20 }}>{content}</Typography>
+          ) : (
+            /* If we have blocks, map them */
+            messageBlocks.map((block, idx) =>
+              isCodeBlock(block) ? (
+                <SyntaxHighlighter
+                  key={idx}
+                  style={coldarkDark}
+                  language="javascript"
+                >
+                  {block}
+                </SyntaxHighlighter>
+              ) : (
+                <Typography key={idx} sx={{ fontSize: 20 }}>
+                  {block}
+                </Typography>
+              )
+            )
+          )}
+        </Box>
+      </Box>
+    );
+  } else {
+    // role === "user"
+    return (
+      <Box
+        sx={{
+          display: "flex",
+          p: 2,
+          bgcolor: "#004d56",
+          gap: 2,
+          borderRadius: 2,
+        }}
+      >
+        <Avatar sx={{ ml: 0, bgcolor: "black", color: "white" }}>
+          {firstInitial}
+          {lastInitial}
+        </Avatar>
+
+        <Box>
+          {messageBlocks.length === 0 ? (
+            <Typography sx={{ fontSize: 20 }}>{content}</Typography>
+          ) : (
+            messageBlocks.map((block, idx) =>
+              isCodeBlock(block) ? (
+                <SyntaxHighlighter
+                  key={idx}
+                  style={coldarkDark}
+                  language="javascript"
+                >
+                  {block}
+                </SyntaxHighlighter>
+              ) : (
+                <Typography key={idx} sx={{ fontSize: 20 }}>
+                  {block}
+                </Typography>
+              )
+            )
+          )}
+        </Box>
+      </Box>
+    );
+  }
+};
+
+export default ChatItem;
