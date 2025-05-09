@@ -1,1 +1,1 @@
-# Relevant-Source-Code-
+This repository is to show proof of the main components of the AI Suspect Interview Training application. The repository contains only the files that were directly relevant to the implementation of the suspect interview functionality.
