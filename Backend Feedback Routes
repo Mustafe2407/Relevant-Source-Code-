@@ -1,0 +1,10 @@
+import { Router } from "express";
+import { getFeedback } from "../controllers/feedback-controllers.js";
+import { verifyToken } from "../utils/token-manager.js";
+
+const feedbackRoutes = Router();
+
+feedbackRoutes.post("/", verifyToken, getFeedback);
+
+export default feedbackRoutes;
+
