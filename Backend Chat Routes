@@ -1,0 +1,11 @@
+import { Router } from "express";
+import { verifyToken } from "../utils/token-manager.js";
+import { getUserChats, sendChatCompletion, deleteChats } from "../controllers/chat-controllers.js";
+
+const chatRoutes = Router();
+
+chatRoutes.get("/", verifyToken, getUserChats);
+chatRoutes.post("/", verifyToken, sendChatCompletion);
+chatRoutes.delete("/", verifyToken, deleteChats);
+
+export default chatRoutes;
